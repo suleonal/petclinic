@@ -73,12 +73,10 @@ jobs:
           helm package .
           CHART_TGZ=$(ls petclinic-*.tgz)
           echo "Chart package name is $CHART_TGZ"
-          echo "CHART_TGZ=$CHART_TGZ" >> $GITHUB_ENV
+          echo "::set-output name=chart_tgz::$CHART_TGZ"
 
       - name: Push Helm Chart to Repository using curl
         run: |
-          curl --data-binary "@${CHART_TGZ}" \
+          curl --data-binary "@${{ steps.package_helm_chart.outputs.chart_tgz }}" \
           -H "Content-Type: application/x-gzip" \
           http://13.49.207.89:30511/api/charts
-        env:
-          CHART_TGZ: ${{ env.CHART_TGZ }}
