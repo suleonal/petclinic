@@ -76,7 +76,7 @@ jobs:
 
       - name: Push Helm Chart to Repository using curl
         run: |
-          curl --data-binary "@${{ steps.package_helm_chart.outputs.CHART_TGZ }}" \
+          curl --data-binary "@${CHART_TGZ}" \
           -H "Content-Type: application/x-gzip" \
           http://13.49.207.89:30511/api/charts
         env:
