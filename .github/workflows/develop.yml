@@ -67,9 +67,7 @@ jobs:
     
           sed -i "s/version: .*/version: $NEW_VERSION/" devops/Chart.yaml
 
-      - name: Update Chart.yaml with New Version
-        run: |
-          sed -i "s/version: .*/version: $NEW_VERSION/" devops/Chart.yaml
+          cat devops/Chart.yaml
 
       - name: Package Helm Chart
         run: |
