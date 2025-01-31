@@ -36,7 +36,7 @@ jobs:
             ${{ secrets.DOCKER_HUB_USERNAME }}/petclinic:${{ env.GIT_COMMIT_SHA }}
       
       - name: Set up Helm
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v4.2.0
         with:
           version: latest
         env:
