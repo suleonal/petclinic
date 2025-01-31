@@ -1,162 +1,540 @@
-# Spring PetClinic Sample Application [![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml)[![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml)
+# ZENIGMA LOG PROCESS
+## _This document is a system that automates continuous logging, log cycling, and process management within a Docker container._
+##### zenigma_logger.sh
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/spring-projects/spring-petclinic) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=7517918)
+The zenigma_logger.sh script appends "Hello Zenigma!" to the zenigma.log file every 15 seconds.
+```sh
+#!/bin/bash  
 
-## Understanding the Spring Petclinic application with a few diagrams
+LOG_FILE="/app/zenigma.log"  
 
-[See the presentation here](https://speakerdeck.com/michaelisvy/spring-petclinic-sample-application)
-
-## Run Petclinic locally
-
-Spring Petclinic is a [Spring Boot](https://spring.io/guides/gs/spring-boot) application built using [Maven](https://spring.io/guides/gs/maven/) or [Gradle](https://spring.io/guides/gs/gradle/). You can build a jar file and run it from the command line (it should work just as well with Java 17 or newer):
-
-```bash
-git clone https://github.com/spring-projects/spring-petclinic.git
-cd spring-petclinic
-./mvnw package
-java -jar target/*.jar
+while true; do  
+    echo "$(date +"%Y-%m-%d %H:%M:%S") Merhaba Zenigma!" >> "$LOG_FILE"  
+    sleep 15  
+done  
 ```
 
-You can then access the Petclinic at <http://localhost:8080/>.
+##### zenigma_killer.sh
+The zenigma_killer.sh script checks if the zenigma.log file has 20 or more lines. If so, it terminates the logger process, deletes the log file, and restarts the logger, logging each action to killer.log.
+```sh
+#!/bin/bash  
 
-<img width="1042" alt="petclinic-screenshot" src="https://cloud.githubusercontent.com/assets/838318/19727082/2aee6d6c-9b8e-11e6-81fe-e889a5ddfded.png">
+LOG_FILE="/app/zenigma.log"  
+PID_FILE="/app/zenigma_logger.pid"  
+KILLER_LOG="/app/killer.log"  
 
-Or you can run it from Maven directly using the Spring Boot Maven plugin. If you do this, it will pick up changes that you make in the project immediately (changes to Java source files require a compile as well - most people use an IDE for this):
+if [[ -f "$LOG_FILE" ]]; then  
+    LINE_COUNT=$(wc -l < "$LOG_FILE")  
+else  
+    LINE_COUNT=0  
+fi  
 
-```bash
-./mvnw spring-boot:run
+if [[ "$LINE_COUNT" -ge 20 ]]; then  
+    if [[ -f "$PID_FILE" ]]; then  
+        kill -9 $(cat "$PID_FILE") 2>/dev/null  
+        echo "$(date +"%Y-%m-%d %H:%M:%S") - Logger process terminated. Line count: $LINE_COUNT" >> "$KILLER_LOG"
+        rm -f "$PID_FILE"  
+    fi  
+
+    rm -f "$LOG_FILE"  
+    echo "$(date +"%Y-%m-%d %H:%M:%S") - zenigma.log deleted." >> "$KILLER_LOG"  
+
+    nohup bash /app/zenigma_logger.sh &> /dev/null &  
+    echo $! > "$PID_FILE"  
+    echo "$(date +"%Y-%m-%d %H:%M:%S") - Logger restarted." >> "$KILLER_LOG"  
+fi
 ```
+##### .entrypoint.sh
+The entrypoint.sh script is responsible for starting the logger script in the background using nohup, while continuously checking the log file with the killer.sh script every 5 minutes.
+```sh
+#!/bin/bash  
+nohup bash /app/zenigma_logger.sh &> /dev/null &  
+echo $! > /app/zenigma_logger.pid  
 
-> NOTE: If you prefer to use Gradle, you can build the app using `./gradlew build` and look for the jar file in `build/libs`.
-
-## Building a Container
-
-There is no `Dockerfile` in this project. You can build a container image (if you have a docker daemon) using the Spring Boot build plugin:
-
-```bash
-./mvnw spring-boot:build-image
+while true; do  
+    bash /app/zenigma_killer.sh  
+    sleep 300
+done  
 ```
-
-## In case you find a bug/suggested improvement for Spring Petclinic
-
-Our issue tracker is available [here](https://github.com/spring-projects/spring-petclinic/issues).
-
-## Database configuration
-
-In its default configuration, Petclinic uses an in-memory database (H2) which
-gets populated at startup with data. The h2 console is exposed at `http://localhost:8080/h2-console`,
-and it is possible to inspect the content of the database using the `jdbc:h2:mem:<uuid>` URL. The UUID is printed at startup to the console.
-
-A similar setup is provided for MySQL and PostgreSQL if a persistent database configuration is needed. Note that whenever the database type changes, the app needs to run with a different profile: `spring.profiles.active=mysql` for MySQL or `spring.profiles.active=postgres` for PostgreSQL. See the [Spring Boot documentation](https://docs.spring.io/spring-boot/how-to/properties-and-configuration.html#howto.properties-and-configuration.set-active-spring-profiles) for more detail on how to set the active profile.
-
-You can start MySQL or PostgreSQL locally with whatever installer works for your OS or use docker:
-
-```bash
-docker run -e MYSQL_USER=petclinic -e MYSQL_PASSWORD=petclinic -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:9.1
+##### Dockerfile
+The Dockerfile sets up an Ubuntu-based container and copies the necessary scripts into the container. The scripts are then made executable, and an entry point is defined to run the entrypoint.sh script.
+```sh
+FROM ubuntu:latest  
+WORKDIR /app  
+COPY zenigma_logger.sh zenigma_killer.sh entrypoint.sh ./  
+RUN chmod +x zenigma_logger.sh zenigma_killer.sh entrypoint.sh  
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
 ```
+# PET CLINIC APP
+## _This document contains all devops processes of a new petclinic application._
 
-or
+## Installation Guide
+- Docker
+- Kubectl
+- Helm
+- RKE2
+- Chartmuseum
+- ArgoCD
 
-```bash
-docker run -e POSTGRES_USER=petclinic -e POSTGRES_PASSWORD=petclinic -e POSTGRES_DB=petclinic -p 5432:5432 postgres:17.0
+## Overview
+This document provides a step-by-step guide for deploying the Spring Petclinic application on Kubernetes, covering containerization, infrastructure provisioning, and CI/CD pipeline automation. The process includes:
+
+Containerization: The application is packaged as a Docker container using a Dockerfile based on OpenJDK.
+Infrastructure Automation: A Kubernetes cluster is provisioned using Ansible, with RKE2 as the preferred distribution.
+CI/CD Pipeline: GitHub Actions automates the build, containerization, and deployment process.
+Artifact Management: A container registry (Docker Hub) is used for storing and managing Docker images.
+Deployment: The application is deployed on a Kubernetes cluster and exposed via a public IP for accessibility.
+This guide ensures a fully automated DevOps workflow, from development to production, enabling scalability, maintainability, and streamlined operations.
+## Setup
+#### 1. Docker
+Enables containerization for deploying the Python application.
+```sh
+#!/bin/bash
+
+sudo apt-get install -y ca-certificates curl software-properties-common
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo "Adding Docker repository..."
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+echo "Installing Docker and required components..."
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+echo "Docker installation completed. Checking version..."
+docker --version
+
+sudo usermod -aG docker $USER
+newgrp docker
 ```
+#### 2. Kubectl
+CLI tool for managing Kubernetes clusters.
+```sh
+!/bin/bash
 
-Further documentation is provided for [MySQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/mysql/petclinic_db_setup_mysql.txt)
-and [PostgreSQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/postgres/petclinic_db_setup_postgres.txt).
+echo "Installing prerequisites..."
+sudo apt-get install -y apt-transport-https ca-certificates curl
 
-Instead of vanilla `docker` you can also use the provided `docker-compose.yml` file to start the database containers. Each one has a service named after the Spring profile:
+echo "Adding Kubernetes GPG key..."
+curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 
-```bash
-docker compose up mysql
+echo "Adding Kubernetes apt repository..."
+echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+echo "Updating package lists after adding Kubernetes repo..."
+sudo apt-get update
+
+echo "Installing kubectl..."
+sudo apt-get install -y kubectl
+
+echo "Verifying kubectl installation..."
+kubectl version --client
 ```
+#### 3. Helm
+Kubernetes package manager for deploying and managing applications.
+```sh
+#!/bin/bash
 
-or
+echo "Downloading Helm GPG key..."
+curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
 
-```bash
-docker compose up postgres
+echo "Installing APT transport-https..."
+sudo apt-get install apt-transport-https --yes
+
+echo "Adding Helm repository..."
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+
+echo "Updating package lists..."
+sudo apt-get update
+
+echo "Installing Helm..."
+sudo apt-get install helm --yes
+
+echo "Checking Helm version..."
+helm version
 ```
+# Installation
+### Create RKE2 Cluster with Ansible
+##### Directory Structure
+.
+```sh
+.
+├── inventory.ini
+├── main.yml
+├── roles
+│   ├── installation
+│   │   └── tasks
+│   │       ├── install_master.yml
+│   │       ├── join_master.yml
+│   │       ├── join_worker.yml
+│   └── requirements
+│       └── tasks
+│           └── requirements.yml
+└── vars
+   └── vars.yml
+```
+##### Playbook Files
+-> inventory.ini
+Server inventory file. Contains IP addresses and SSH connection information of master and worker nodes.
+```sh
+[allnode:children]
+master-firstnode
+workers
 
-## Test Applications
+[master-firstnode]
+rke2-node1 ansible_host=13.49.207.89 ansible_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/case.pem
 
-At development time we recommend you use the test applications set up as `main()` methods in `PetClinicIntegrationTests` (using the default H2 database and also adding Spring Boot Devtools), `MySqlTestApplication` and `PostgresIntegrationTests`. These are set up so that you can run the apps in your IDE to get fast feedback and also run the same classes as integration tests against the respective database. The MySql integration tests use Testcontainers to start the database in a Docker container, and the Postgres tests use Docker Compose to do the same thing.
+[workers]
+rke2-worker-node1 ansible_host=16.171.203.157 ansible_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/case.pem
+rke2-worker-node2 ansible_host=51.20.20.206 ansible_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/case.pem
 
-## Compiling the CSS
+[allnode:vars]
+ansible_user=root
+remote_tmp=/tmp/.ansible-${USER}/tmp
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+```
+-> vars.yml
+File where variables are defined. Contains the necessary paths and parameters for RKE2 configuration.
+```sh
+##Installing ENV
+confvar: "/var/lib/rancher/rke2/server"
+confdir: "/etc/rancher/rke2"
+conffile: "{{ confdir }}/config.yaml"
+clustername: "test"
+kubeconfig: "/etc/rancher/rke2/rke2.yaml"
+```
+-> install_master.yml
+Contains tasks for setting up the master node.
+```sh
+---
+    - name: Create RKE2 Directory
+      file:
+        path: "{{ confdir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0770'
+        recurse: yes
 
-There is a `petclinic.css` in `src/main/resources/static/resources/css`. It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library. If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources using the Maven profile "css", i.e. `./mvnw package -P css`. There is no build profile for Gradle to compile the CSS.
+    - name: Installing RKE2 Server
+      shell: |
+          curl -sfL https://get.rke2.io |  INSTALL_RKE2_TYPE=server sh -
 
-## Working with Petclinic in your IDE
+    - name: Start rke2-server service
+      service:
+        name: rke2-server
+        state: started
+        enabled: yes
 
-### Prerequisites
+    - name: Simlink kubectl
+      shell: |
+        ln -s $(find /var/lib/rancher/rke2/data/ -name kubectl) /usr/local/bin/kubectl
+      ignore_errors: yes
 
-The following items should be installed in your system:
+    - name: Append /var/lib/rancher/rke2/bin/ to PATH env
+      lineinfile:
+        path: /root/.bash_profile
+        line: export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        create: yes
+        backup: yes
 
-- Java 17 or newer (full JDK, not a JRE)
-- [Git command line tool](https://help.github.com/articles/set-up-git)
-- Your preferred IDE
-  - Eclipse with the m2e plugin. Note: when m2e is available, there is an m2 icon in `Help -> About` dialog. If m2e is
-  not there, follow the install process [here](https://www.eclipse.org/m2e/)
-  - [Spring Tools Suite](https://spring.io/tools) (STS)
-  - [IntelliJ IDEA](https://www.jetbrains.com/idea/)
-  - [VS Code](https://code.visualstudio.com)
+    - name: Create RKE2 config.yaml for joining
+      shell: "echo server: https://{{ ansible_host }}:9345 > {{ confvar }}/config.yaml; \
+              echo token: $(cat {{ confvar }}/node-token) >> {{ confvar }}/config.yaml"
 
-### Steps
+    - name: Fetch Token From Master
+      fetch:
+       src: "{{ confvar }}/config.yaml"
+       dest: "/tmp/rke2_{{ clustername }}_config.yaml"
+       flat: yes
+```
+-> join_master.yml
+Contains tasks to incorporate master nodes into the cluster.
+```sh
+---
+  - name: Create RKE2 Directory
+    file:
+       path: "{{ confdir }}"
+       state: directory
+       owner: root
+       group: root
+       mode: '0770'
+       recurse: yes
 
-1. On the command line run:
+  - name: Installing RKE2 Server
+    shell: |
+        curl -sfL https://get.rke2.io |  INSTALL_RKE2_TYPE=server sh -
 
-    ```bash
-    git clone https://github.com/spring-projects/spring-petclinic.git
-    ```
 
-1. Inside Eclipse or STS:
+  - name: Copy Master Rancher Config file
+    copy:
+     src: /tmp/rke2_{{ clustername }}_config.yaml
+     dest: /etc/rancher/rke2/config.yaml
+     owner: root
+     group: root
+     mode: '0660'
 
-    Open the project via `File -> Import -> Maven -> Existing Maven project`, then select the root directory of the cloned repo.
+  - name: Start rke2-server service
+    service:
+      name: rke2-server
+      state: started
+      enabled: yes
 
-    Then either build on the command line `./mvnw generate-resources` or use the Eclipse launcher (right-click on project and `Run As -> Maven install`) to generate the CSS. Run the application's main method by right-clicking on it and choosing `Run As -> Java Application`.
+  - name: Simlink kubectl
+    shell: |
+      ln -s $(find /var/lib/rancher/rke2/data/ -name kubectl) /usr/local/bin/kubectl
+    ignore_errors: yes
 
-1. Inside IntelliJ IDEA:
+  - name: Append /var/lib/rancher/rke2/bin/ to PATH env
+    lineinfile:
+      path: /root/.bash_profile
+      line: export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+      create: yes
+      backup: yes
+```
+-> join_worker.yml
+Contains tasks to add worker nodes to the cluster.
+```sh
+---
+  - name: Create RKE2 Directory
+    file:
+       path: "{{ confdir }}"
+       state: directory
+       owner: root
+       group: root
+       mode: '0770'
+       recurse: yes
 
-    In the main menu, choose `File -> Open` and select the Petclinic [pom.xml](pom.xml). Click on the `Open` button.
+  - name: Installing RKE2 Agent on Workers
+    shell: |
+        curl -sfL https://get.rke2.io |  INSTALL_RKE2_TYPE=agent sh -
 
-    - CSS files are generated from the Maven build. You can build them on the command line `./mvnw generate-resources` or right-click on the `spring-petclinic` project then `Maven -> Generates sources and Update Folders`.
+  - name: Copy Master Rancher Config file
+    copy:
+     src: /tmp/rke2_{{ clustername }}_config.yaml
+     dest: /etc/rancher/rke2/config.yaml
+     owner: root
+     group: root
+     mode: '0660'
 
-    - A run configuration named `PetClinicApplication` should have been created for you if you're using a recent Ultimate version. Otherwise, run the application by right-clicking on the `PetClinicApplication` main class and choosing `Run 'PetClinicApplication'`.
+  - name: Start rke2-agent service
+    service:
+      name: rke2-agent
+      state: started
+      enabled: yes
 
-1. Navigate to the Petclinic
+  - name: Simlink kubectl
+    shell: |
+      ln -s $(find /var/lib/rancher/rke2/data/ -name kubectl) /usr/local/bin/kubectl
+    ignore_errors: yes
 
-    Visit [http://localhost:8080](http://localhost:8080) in your browser.
+  - name: Append /var/lib/rancher/rke2/bin/ to PATH env
+    lineinfile:
+      path: /root/.bash_profile
+      line: export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+      create: yes
+      backup: yes
+```
+-> main.yml
+Main Ansible playbook. Sets up master and worker nodes in order.
+```sh
+---
+- hosts: master-firstnode
+  become: yes
+  tasks:
+    - name: Include vars
+      include_vars:
+        dir: vars
 
-## Looking for something in particular?
+    - name: Install RKE2 Master Server
+      include_role:
+        name: installation
+        tasks_from: install_master.yml
 
-|Spring Boot Configuration | Class or Java property files  |
-|--------------------------|---|
-|The Main Class | [PetClinicApplication](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java) |
-|Properties Files | [application.properties](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources) |
-|Caching | [CacheConfiguration](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java) |
+- hosts: master-nextnodes
+  become: yes
+  tasks:
+    - name: Include vars
+      include_vars:
+        dir: vars
 
-## Interesting Spring Petclinic branches and forks
+    - name: Install RKE2 Next Master Nodes
+      include_role:
+        name: installation
+        tasks_from: join_master.yml
 
-The Spring Petclinic "main" branch in the [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation based on Spring Boot and Thymeleaf. There are
-[quite a few forks](https://spring-petclinic.github.io/docs/forks.html) in the GitHub org
-[spring-petclinic](https://github.com/spring-petclinic). If you are interested in using a different technology stack to implement the Pet Clinic, please join the community there.
+- hosts: workers
+  become: yes
+  tasks:
+    - name: Include vars
+      include_vars:
+        dir: vars
 
-## Interaction with other open-source projects
+    - name: Install RKE2 Next Master Nodes
+      include_role:
+        name: installation
+        tasks_from: join_worker.yml
+```
+To run Playbook we used the following command:
+```sh
+ansible-playbook main.yml -i inventory.ini
+```
+#### Docker Build and Push
+This Dockerfile uses a multi-stage build to optimize the container size. The first stage compiles the Spring Petclinic application using Maven, and the second stage runs the application with a lightweight Eclipse Temurin JDK 17 base image. 
+```sh
+FROM maven:3.9.6-eclipse-temurin-17 AS builder
 
-One of the best parts about working on the Spring Petclinic application is that we have the opportunity to work in direct contact with many Open Source projects. We found bugs/suggested improvements on various topics such as Spring, Spring Data, Bean Validation and even Eclipse! In many cases, they've been fixed/implemented in just a few days.
-Here is a list of them:
+WORKDIR /app
+COPY . .
+RUN mvn package -DskipTests
 
-| Name | Issue |
-|------|-------|
-| Spring JDBC: simplify usage of NamedParameterJdbcTemplate | [SPR-10256](https://github.com/spring-projects/spring-framework/issues/14889) and [SPR-10257](https://github.com/spring-projects/spring-framework/issues/14890) |
-| Bean Validation / Hibernate Validator: simplify Maven dependencies and backward compatibility |[HV-790](https://hibernate.atlassian.net/browse/HV-790) and [HV-792](https://hibernate.atlassian.net/browse/HV-792) |
-| Spring Data: provide more flexibility when working with JPQL queries | [DATAJPA-292](https://github.com/spring-projects/spring-data-jpa/issues/704) |
+FROM eclipse-temurin:17-jdk-alpine
 
-## Contributing
+WORKDIR /app
+COPY --from=builder /app/target/spring-petclinic-3.4.0-SNAPSHOT.jar app.jar
 
-The [issue tracker](https://github.com/spring-projects/spring-petclinic/issues) is the preferred channel for bug reports, feature requests and submitting pull requests.
+EXPOSE 8080
+CMD ["java", "-jar", "app.jar"]
+```
+This GitHub Actions workflow builds and pushes a Docker image for the Spring Petclinic app. It logs into Docker Hub, extracts the Git commit SHA, and tags the image before pushing it.
+```sh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <https://editorconfig.org>. If you have not previously done so, please fill out and submit the [Contributor License Agreement](https://cla.pivotal.io/sign/spring).
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-## License
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-The Spring PetClinic sample application is released under version 2.0 of the [Apache License](https://www.apache.org/licenses/LICENSE-2.0).
+      - name: Extract Git Commit SHA
+        run: echo "GIT_COMMIT_SHA=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/petclinic:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/petclinic:${{ env.GIT_COMMIT_SHA }}
+```
+### Chartmuseum Installation
+By using ChartMuseum, we will store the application's Helm packages in a publicly accessible central repository. This way, when using ArgoCD, we can pull the Helm resources from there.
+```sh
+helm repo add chartmuseum https://chartmuseum.github.io/charts
+helm install helm-repo chartmuseum/chartmuseum -f values.yaml
+```
+```sh
+env:
+  open:
+    DISABLE_API: false
+```
+NOTE: 
+Ensures that the application's API is active.
+#### Helm Package And Helm Push:
+Packages the Helm chart into a .tgz file and pushes it to a Helm chart repository for versioned storage and distribution.
+```sh
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: latest
+        env:
+          GIT_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Get Current Version
+        id: get_version
+        run: |
+          # Get the current version from Chart.yaml
+          VERSION=$(grep "version:" devops/Chart.yaml | awk '{print $2}')
+          echo "Current version is $VERSION"
+
+      - name: Set the chart version based on run number
+        run: |
+          sed -i "s/^version:.*/version: $GITHUB_RUN_NUMBER/" devops/Chart.yaml
+          cat devops/Chart.yaml
+
+      - name: Package Helm Chart
+        id: package_helm_chart
+        run: |
+          cd devops/
+          rm -f petclinic-*.tgz
+          helm package .
+          CHART_TGZ=$(ls petclinic-*.tgz)
+          echo "Chart package name is $CHART_TGZ"
+          echo "::set-output name=chart_tgz::$CHART_TGZ"
+
+      - name: Push Helm Chart to Repository using curl
+        run: |
+          cd devops/
+          curl --data-binary "@${{ steps.package_helm_chart.outputs.chart_tgz }}" \
+          -H "Content-Type: application/x-gzip" \
+          http://13.49.207.89:30511/api/charts
+```
+### ArgoCD Installation
+This section explains how to set up ArgoCD to deploy the petclinic project with a Helm chart from a private repository.
+
+1.Create a Secret for Repository Credentials
+To authenticate ArgoCD to access the private Helm repository, create a secret:
+```sh
+apiVersion: v1
+kind: Secret
+metadata:
+  name: museum-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  project: app
+  type: helm
+  url: http://helm-repo-chartmuseum.default.svc.cluster.local:8080
+```
+2.Define ArgoCD Project
+Define a project within ArgoCD that uses the above repository for deployment:
+```sh
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: app
+spec:
+  description: "Pet Clinic project"
+  sourceRepos:
+    - 'http://helm-repo-chartmuseum.default.svc.cluster.local:8080'
+  destinations:
+    - namespace: applications
+      server: 'https://kubernetes.default.svc'
+```
+3.Create ArgoCD Application For Backend 
+Create an ArgoCD application to deploy the Helm chart from the repository:
+```sh
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app
+spec:
+  destination:
+    name: ''
+    namespace: applications
+    server: 'https://kubernetes.default.svc'
+  project: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+  sources:
+  - repoURL: 'http://helm-repo-chartmuseum.default.svc.cluster.local:8080'
+    chart: petclinic
+    targetRevision: '*'
+```
+To retrieve the initial admin password for ArgoCD, you can use the following kubectl command:
+```sh
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+This configuration enables ArgoCD to deploy the petclinic project from a private Helm repository and manage its lifecycle in Kubernetes.
