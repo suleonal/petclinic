@@ -51,7 +51,6 @@ jobs:
 
       - name: Set the chart version based on run number
         run: |
-          # Chart.yaml dosyasını düzenle
           sed -i "s/^version:.*/version: $GITHUB_RUN_NUMBER/" devops/Chart.yaml
           cat devops/Chart.yaml
 
