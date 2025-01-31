@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: runner-1
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
