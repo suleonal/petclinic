@@ -70,6 +70,7 @@ jobs:
         id: package_helm_chart
         run: |
           cd devops/
+          rm -f petclinic-*.tgz
           helm package .
           CHART_TGZ=$(ls petclinic-*.tgz)
           echo "Chart package name is $CHART_TGZ"
