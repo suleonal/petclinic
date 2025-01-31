@@ -67,6 +67,7 @@ jobs:
           cat devops/Chart.yaml
 
       - name: Package Helm Chart
+        id: package_helm_chart
         run: |
           cd devops/
           helm package .
