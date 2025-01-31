@@ -49,21 +49,10 @@ jobs:
           VERSION=$(grep "version:" devops/Chart.yaml | awk '{print $2}')
           echo "Current version is $VERSION"
 
-      - name: Increment Version
-        id: increment_version
+      - name: Set the chart version based on run number
         run: |
-          VERSION="0.1.0"  
-          echo "Current version is $VERSION"
-    
-          IFS='.' read -r major minor patch <<< "$VERSION"
-    
-          patch=$((patch + 1))
-    
-          NEW_VERSION="$major.$minor.$patch"
-          echo "New version is $NEW_VERSION"
-    
-          sed -i "s/version: .*/version: $NEW_VERSION/" devops/Chart.yaml
-
+          # Chart.yaml dosyasını düzenle
+          sed -i "s/^version:.*/version: $GITHUB_RUN_NUMBER/" devops/Chart.yaml
           cat devops/Chart.yaml
 
       - name: Package Helm Chart
