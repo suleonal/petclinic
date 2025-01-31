@@ -34,3 +34,32 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/petclinic:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/petclinic:${{ env.GIT_COMMIT_SHA }}
+      
+      - name: Set up Helm
+        uses: azure/setup-helm@v1
+     
+      - name: Get Current Version
+        id: get_version
+        run: |
+          # Get the current version from Chart.yaml
+          VERSION=$(grep "version:" devops/Chart.yaml | awk '{print $2}')
+          echo "Current version is $VERSION"
+
+      - name: Increment Version
+        id: increment_version
+        run: |
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          
+          patch=$((patch + 1))
+          
+          NEW_VERSION="$major.$minor.$patch"
+          echo "New version is $NEW_VERSION"
+
+      - name: Update Chart.yaml with New Version
+        run: |
+          sed -i "s/version: .*/version: $NEW_VERSION/" devops/Chart.yaml
+
+      - name: Package Helm Chart
+        run: |
+          cd devops/
+          helm package . 
