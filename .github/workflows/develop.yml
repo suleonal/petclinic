@@ -52,12 +52,20 @@ jobs:
       - name: Increment Version
         id: increment_version
         run: |
+          VERSION="0.1.0"  # Bu kısmı, Chart.yaml dosyasından aldığınız değere göre değiştirebilirsiniz
+          echo "Current version is $VERSION"
+    
+          # Split version into major, minor, patch
           IFS='.' read -r major minor patch <<< "$VERSION"
-          
+    
+           # Make sure patch is an integer, increment it
           patch=$((patch + 1))
-          
+    
+           # Form the new version
           NEW_VERSION="$major.$minor.$patch"
           echo "New version is $NEW_VERSION"
+    
+          sed -i "s/version: .*/version: $NEW_VERSION/" devops/Chart.yaml
 
       - name: Update Chart.yaml with New Version
         run: |
